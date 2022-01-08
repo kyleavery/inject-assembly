@@ -114,7 +114,7 @@ D_SEC( B ) VOID WINAPI ExecuteAssembly( _In_ LPVOID Data )
     if ( U32 == NULL )
     {
         Api.RtlInitUnicodeString( &Uni, C_PTR( G_PTR( L"user32.dll" ) ) );
-        Api.LdrLoadDll( NULL, 0, &Uni, &Shl );
+        Api.LdrLoadDll( NULL, 0, &Uni, &U32 );
         if ( U32 == NULL ) goto cleanup;
         ULd = TRUE;
     };
